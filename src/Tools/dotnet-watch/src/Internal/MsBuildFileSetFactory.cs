@@ -72,6 +72,7 @@ namespace Microsoft.DotNet.Watcher.Internal
                         Arguments = new[]
                         {
                             "msbuild",
+                            "/nologo",
                             _projectFile,
                             $"/p:_DotNetWatchListFile={watchList}"
                         }.Concat(_buildFlags),

@@ -14,7 +14,7 @@ using Microsoft.Extensions.Tools.Internal;
 
 namespace Microsoft.DotNet.Watcher
 {
-    public class DotNetWatcher
+    public class DotNetWatcher : IDisposable
     {
         private readonly IReporter _reporter;
         private readonly ProcessRunner _processRunner;
@@ -31,6 +31,7 @@ namespace Microsoft.DotNet.Watcher
             {
                 new MSBuildEvaluationFilter(fileSetFactory),
                 new NoRestoreFilter(),
+                new LaunchBrowserFilter(),
             };
         }
 
@@ -137,6 +138,17 @@ namespace Microsoft.DotNet.Watcher
                     {
                         _reporter.Output($"File changed: {fileSetTask.Result}");
                     }
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var filter in _filters)
+            {
+                if (filter is IDisposable disposable)
+                {
+                    disposable.Dispose();
                 }
             }
         }
