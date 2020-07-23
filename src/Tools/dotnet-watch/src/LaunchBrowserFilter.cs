@@ -80,7 +80,7 @@ namespace Microsoft.DotNet.Watcher.Tools
 
         private void OnOutput(object sender, DataReceivedEventArgs eventArgs)
         {
-            // We've redirected the output, but want to ensure that continues to appear in the user's console.
+            // We've redirected the output, but want to ensure that it continues to appear in the user's console.
             Console.WriteLine(eventArgs.Data);
 
             if (string.IsNullOrEmpty(eventArgs.Data))
