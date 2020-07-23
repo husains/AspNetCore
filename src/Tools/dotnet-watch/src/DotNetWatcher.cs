@@ -14,7 +14,7 @@ using Microsoft.Extensions.Tools.Internal;
 
 namespace Microsoft.DotNet.Watcher
 {
-    public class DotNetWatcher : IDisposable
+    public class DotNetWatcher : IAsyncDisposable
     {
         private readonly IReporter _reporter;
         private readonly ProcessRunner _processRunner;
@@ -142,14 +142,19 @@ namespace Microsoft.DotNet.Watcher
             }
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             foreach (var filter in _filters)
             {
-                if (filter is IDisposable disposable)
+                if (filter is IAsyncDisposable asyncDisposable)
                 {
-                    disposable.Dispose();
+                    await asyncDisposable.DisposeAsync();
                 }
+                else if (filter is IDisposable diposable)
+                {
+                    diposable.Dispose();
+                }
+                
             }
         }
     }

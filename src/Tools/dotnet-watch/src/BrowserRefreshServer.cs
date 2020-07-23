@@ -19,18 +19,17 @@ using Microsoft.Extensions.Tools.Internal;
 
 namespace Microsoft.DotNet.Watcher.Tools
 {
-    public class BrowserRefreshServer : IDisposable
+    public class BrowserRefreshServer : IAsyncDisposable
     {
         private readonly IReporter _reporter;
         private readonly TaskCompletionSource _taskCompletionSource;
         private IHost _refreshServer;
         private WebSocket _webSocket;
 
-        public BrowserRefreshServer(
-            IReporter reporter)
+        public BrowserRefreshServer(IReporter reporter)
         {
             _reporter = reporter;
-            _taskCompletionSource = new TaskCompletionSource();
+            _taskCompletionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
         public string Start()
@@ -66,11 +65,11 @@ namespace Microsoft.DotNet.Watcher.Tools
             var isDone = new ManualResetEvent(false);
 
             ExceptionDispatchInfo edi = null;
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 try
                 {
-                    host.Start();
+                    await host.StartAsync();
                 }
                 catch (Exception ex)
                 {
@@ -91,7 +90,7 @@ namespace Microsoft.DotNet.Watcher.Tools
             }
         }
 
-        async Task WebSocketRequest(HttpContext context)
+        private async Task WebSocketRequest(HttpContext context)
         {
             if (!context.WebSockets.IsWebSocketRequest)
             {
@@ -120,9 +119,20 @@ namespace Microsoft.DotNet.Watcher.Tools
             }
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
-            _refreshServer?.Dispose();
+            if (_webSocket != null)
+            {
+                await _webSocket.CloseOutputAsync(WebSocketCloseStatus.Empty, null, default);
+                _webSocket.Dispose();
+            }
+
+            if (_refreshServer != null)
+            {
+                await _refreshServer.StopAsync();
+                _refreshServer.Dispose();
+            }
+
             _taskCompletionSource.TrySetResult();
         }
     }

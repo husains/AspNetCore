@@ -15,12 +15,12 @@ using Microsoft.Extensions.Tools.Internal;
 
 namespace Microsoft.DotNet.Watcher.Tools
 {
-    public sealed class LaunchBrowserFilter : IWatchFilter, IDisposable
+    public sealed class LaunchBrowserFilter : IWatchFilter, IAsyncDisposable
     {
         private readonly byte[] ReloadMessage = Encoding.UTF8.GetBytes("Reload");
         private readonly byte[] WaitMessage = Encoding.UTF8.GetBytes("Wait");
-        private static readonly Regex NowListeningRegex = new Regex(@"^\s*Now listening on: (?<url>.*)$", RegexOptions.None, TimeSpan.FromSeconds(10));
-        private static readonly Regex ApplicationStartedRegex = new Regex(@"^\s*Application started\. Press Ctrl\+C to shut down\.$", RegexOptions.None, TimeSpan.FromSeconds(10));
+        private static readonly Regex NowListeningRegex = new Regex(@"^\s*Now listening on: (?<url>.*)$", RegexOptions.None | RegexOptions.Compiled, TimeSpan.FromSeconds(10));
+        private static readonly Regex ApplicationStartedRegex = new Regex(@"^\s*Application started\. Press Ctrl\+C to shut down\.$", RegexOptions.None | RegexOptions.Compiled, TimeSpan.FromSeconds(10));
 
         private readonly bool _runningInTest;
         private readonly bool _suppressLaunchBrowser;
@@ -135,7 +135,7 @@ namespace Microsoft.DotNet.Watcher.Tools
 
             if (_runningInTest)
             {
-                _reporter.Verbose($"Launching browser: {fileName} {args}");
+                _reporter.Output($"Launching browser: {fileName} {args}");
                 return;
             }
 
@@ -150,6 +150,12 @@ namespace Microsoft.DotNet.Watcher.Tools
         private static bool CanLaunchBrowser(DotNetWatchContext context, out string launchUrl)
         {
             launchUrl = null;
+
+            if (!context.FileSet.IsNetCoreApp31OrNewer)
+            {
+                // Browser refresh middleware supports 3.1 or newer
+                return false;
+            }
 
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
@@ -194,10 +200,13 @@ namespace Microsoft.DotNet.Watcher.Tools
             return defaultProfile.LaunchBrowser;
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             _browserProcess?.Dispose();
-            _refreshServer?.Dispose();
+            if (_refreshServer != null)
+            {
+                await _refreshServer.DisposeAsync();
+            }
         }
     }
 }
