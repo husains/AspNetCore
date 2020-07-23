@@ -52,7 +52,7 @@ namespace Microsoft.DotNet.Watcher.Tools.FunctionalTests
 
         [ConditionalFact]
         [OSSkipCondition(OperatingSystems.Linux)]
-        public async Task UsesBrowserSpecifiedinEnvironment()
+        public async Task UsesBrowserSpecifiedInEnvironment()
         {
             var launchBrowserMessage = "watch : Launching browser: mycustombrowser.bat https://localhost:5001/";
             _app.EnvironmentVariables.Add("DOTNET_WATCH_BROWSER_PATH", "mycustombrowser.bat");
