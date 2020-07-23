@@ -4,7 +4,6 @@
 using System;
 using System.Linq;
 using System.Net.WebSockets;
-using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -32,7 +31,7 @@ namespace Microsoft.DotNet.Watcher.Tools
             _taskCompletionSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        public string Start()
+        public async ValueTask<string> StartAsync(CancellationToken cancellationToken)
         {
             _refreshServer = new HostBuilder()
                 .ConfigureWebHost(builder =>
@@ -48,7 +47,7 @@ namespace Microsoft.DotNet.Watcher.Tools
                 })
                 .Build();
 
-            RunInBackgroundThread(_refreshServer);
+            await _refreshServer.StartAsync(cancellationToken);
 
             var serverUrl = _refreshServer.Services
                 .GetRequiredService<IServer>()
@@ -58,36 +57,6 @@ namespace Microsoft.DotNet.Watcher.Tools
                 .First();
 
             return serverUrl.Replace("http://", "ws://");
-        }
-
-        static void RunInBackgroundThread(IHost host)
-        {
-            var isDone = new ManualResetEvent(false);
-
-            ExceptionDispatchInfo edi = null;
-            Task.Run(async () =>
-            {
-                try
-                {
-                    await host.StartAsync();
-                }
-                catch (Exception ex)
-                {
-                    edi = ExceptionDispatchInfo.Capture(ex);
-                }
-
-                isDone.Set();
-            });
-
-            if (!isDone.WaitOne(TimeSpan.FromSeconds(30)))
-            {
-                throw new TimeoutException("Timed out waiting to start the host");
-            }
-
-            if (edi != null)
-            {
-                throw edi.SourceException;
-            }
         }
 
         private async Task WebSocketRequest(HttpContext context)
@@ -102,7 +71,7 @@ namespace Microsoft.DotNet.Watcher.Tools
             await _taskCompletionSource.Task;
         }
 
-        public async Task SendMessage(byte[] messageBytes)
+        public async Task SendMessage(byte[] messageBytes, CancellationToken cancellationToken = default)
         {
             if (_webSocket == null || _webSocket.CloseStatus.HasValue)
             {
@@ -111,7 +80,7 @@ namespace Microsoft.DotNet.Watcher.Tools
 
             try
             {
-                await _webSocket.SendAsync(messageBytes, WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+                await _webSocket.SendAsync(messageBytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
             }
             catch (Exception ex)
             {

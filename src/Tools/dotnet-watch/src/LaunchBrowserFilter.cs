@@ -20,7 +20,6 @@ namespace Microsoft.DotNet.Watcher.Tools
         private readonly byte[] ReloadMessage = Encoding.UTF8.GetBytes("Reload");
         private readonly byte[] WaitMessage = Encoding.UTF8.GetBytes("Wait");
         private static readonly Regex NowListeningRegex = new Regex(@"^\s*Now listening on: (?<url>.*)$", RegexOptions.None | RegexOptions.Compiled, TimeSpan.FromSeconds(10));
-        private static readonly Regex ApplicationStartedRegex = new Regex(@"^\s*Application started\. Press Ctrl\+C to shut down\.$", RegexOptions.None | RegexOptions.Compiled, TimeSpan.FromSeconds(10));
 
         private readonly bool _runningInTest;
         private readonly bool _suppressLaunchBrowser;
@@ -31,6 +30,7 @@ namespace Microsoft.DotNet.Watcher.Tools
         private BrowserRefreshServer _refreshServer;
         private IReporter _reporter;
         private string _launchPath;
+        private CancellationToken _cancellationToken;
 
         public LaunchBrowserFilter()
         {
@@ -56,9 +56,10 @@ namespace Microsoft.DotNet.Watcher.Tools
                     context.Reporter.Verbose("dotnet-watch is configured to launch a browser on ASP.NET Core application startup.");
                     _canLaunchBrowser = true;
                     _launchPath = launchPath;
+                    _cancellationToken = cancellationToken;
 
                     _refreshServer = new BrowserRefreshServer(context.Reporter);
-                    var serverUrl = _refreshServer.Start();
+                    var serverUrl = await _refreshServer.StartAsync(cancellationToken);
 
                     context.Reporter.Verbose($"Refresh server running at {serverUrl}.");
                     context.ProcessSpec.EnvironmentVariables["DOTNET_WATCH_REFRESH_URL"] = serverUrl;
@@ -72,7 +73,7 @@ namespace Microsoft.DotNet.Watcher.Tools
                 if (context.Iteration > 0)
                 {
                     // We've detected a change. Notify the browser.
-                    await _refreshServer.SendMessage(WaitMessage);
+                    await _refreshServer.SendMessage(WaitMessage, cancellationToken);
                 }
             }
         }
@@ -87,37 +88,33 @@ namespace Microsoft.DotNet.Watcher.Tools
                 return;
             }
 
-            if (ApplicationStartedRegex.IsMatch(eventArgs.Data))
+            var match = NowListeningRegex.Match(eventArgs.Data);
+            if (match.Success)
             {
+                var launchUrl = match.Groups["url"].Value;
+
                 var process = (Process)sender;
                 process.OutputDataReceived -= OnOutput;
                 process.CancelOutputRead();
-            }
-            else
-            {
-                var match = NowListeningRegex.Match(eventArgs.Data);
-                if (match.Success)
-                {
-                    var launchUrl = match.Groups["url"].Value;
 
-                    if (!_browserLaunched)
+                if (!_browserLaunched)
+                {
+                    _reporter.Verbose("Launching browser.");
+                    _browserLaunched = true;
+                    try
                     {
-                        _browserLaunched = true;
-                        try
-                        {
-                            LaunchBrowser(launchUrl);
-                        }
-                        catch (Exception ex)
-                        {
-                            _reporter.Output($"Unable to launch browser: {ex}");
-                            _canLaunchBrowser = false;
-                        }
+                        LaunchBrowser(launchUrl);
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        _reporter.Verbose($"Reloading browser");
-                        _ = _refreshServer.SendMessage(ReloadMessage);
+                        _reporter.Output($"Unable to launch browser: {ex}");
+                        _canLaunchBrowser = false;
                     }
+                }
+                else
+                {
+                    _reporter.Verbose("Reloading browser.");
+                    _ = _refreshServer.SendMessage(ReloadMessage, _cancellationToken);
                 }
             }
         }
@@ -161,7 +158,7 @@ namespace Microsoft.DotNet.Watcher.Tools
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 // Launching a browser requires file associations that are not available in all operating systems.
-                reporter.Verbose("Browser refresh is only supported in Windows and MacOSX.");
+                reporter.Verbose("Browser refresh is only supported in Windows and MacOS.");
                 return false;
             }
 
