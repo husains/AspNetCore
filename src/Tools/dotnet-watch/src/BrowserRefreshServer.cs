@@ -102,7 +102,7 @@ namespace Microsoft.DotNet.Watcher.Tools
             await _taskCompletionSource.Task;
         }
 
-        public async void SendMessage(byte[] messageBytes)
+        public async Task SendMessage(byte[] messageBytes)
         {
             if (_webSocket == null || _webSocket.CloseStatus.HasValue)
             {
@@ -123,7 +123,7 @@ namespace Microsoft.DotNet.Watcher.Tools
         {
             if (_webSocket != null)
             {
-                await _webSocket.CloseOutputAsync(WebSocketCloseStatus.Empty, null, default);
+                await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, default);
                 _webSocket.Dispose();
             }
 
